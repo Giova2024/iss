@@ -1,0 +1,656 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>🛰️ Passaggi ISS in 3D</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/satellite.js@4.1.4/dist/satellite.min.js"></script>
+<style>
+  :root{
+    --bg:#05070f; --panel:#0d1224; --panel2:#131a33; --border:#242c4d;
+    --text:#e7ebff; --dim:#8a90b8; --accent:#4fd1ff; --accent2:#ff7a59;
+    --good:#5ee6a0; --warn:#ffcf5e;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;background:var(--bg);color:var(--text);
+    font-family:"Segoe UI",Roboto,Arial,sans-serif;height:100%;}
+  #stars{position:fixed;inset:0;z-index:0;background:
+    radial-gradient(1px 1px at 20% 30%, #ffffff55 50%, transparent 51%),
+    radial-gradient(1px 1px at 70% 60%, #ffffff44 50%, transparent 51%),
+    radial-gradient(2px 2px at 40% 80%, #ffffff33 50%, transparent 51%),
+    radial-gradient(1px 1px at 85% 15%, #ffffff55 50%, transparent 51%),
+    radial-gradient(1px 1px at 55% 45%, #ffffff33 50%, transparent 51%),
+    var(--bg);}
+  header{position:relative;z-index:2;padding:14px 20px;border-bottom:1px solid var(--border);
+    background:linear-gradient(180deg,#0b0f1f,#0b0f1fcc);display:flex;flex-wrap:wrap;gap:12px;
+    align-items:center;justify-content:space-between;}
+  h1{font-size:1.15rem;margin:0;display:flex;gap:8px;align-items:center;font-weight:600;}
+  h1 small{color:var(--dim);font-weight:400;font-size:.7rem;}
+  .locbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;font-size:.82rem;}
+  .locbar input{width:90px;background:var(--panel2);border:1px solid var(--border);color:var(--text);
+    border-radius:6px;padding:6px 8px;font-size:.82rem;}
+  button{background:linear-gradient(180deg,#1c2a52,#141d3a);color:var(--text);border:1px solid var(--border);
+    border-radius:7px;padding:7px 12px;font-size:.82rem;cursor:pointer;transition:.15s;}
+  button:hover{border-color:var(--accent);color:var(--accent);}
+  button.primary{background:linear-gradient(180deg,#1a5fa8,#0f3d70);border-color:#2b7fd6;color:#fff;}
+  button.primary:hover{border-color:var(--accent);color:#fff;filter:brightness(1.15);}
+  #status{font-size:.75rem;color:var(--dim);}
+  main{position:relative;z-index:1;display:grid;grid-template-columns:1.4fr 1fr;gap:14px;
+    padding:14px;height:calc(100vh - 66px);min-height:600px;}
+  @media (max-width:900px){ main{grid-template-columns:1fr;height:auto;} }
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:12px;
+    display:flex;flex-direction:column;overflow:hidden;}
+  .card h2{margin:0;padding:10px 14px;font-size:.85rem;border-bottom:1px solid var(--border);
+    color:var(--dim);display:flex;justify-content:space-between;align-items:center;letter-spacing:.02em;}
+  #globeWrap{position:relative;min-height:340px;flex:1;}
+  #globeCanvas{width:100%;height:100%;display:block;}
+  #issInfo{position:absolute;left:10px;bottom:10px;background:#00000088;border:1px solid var(--border);
+    border-radius:8px;padding:8px 12px;font-size:.75rem;line-height:1.5;backdrop-filter:blur(4px);}
+  #issInfo b{color:var(--accent);}
+  #nextPassBanner{position:absolute;right:10px;top:10px;background:#00000088;border:1px solid var(--border);
+    border-radius:8px;padding:8px 12px;font-size:.78rem;text-align:right;backdrop-filter:blur(4px);}
+  #nextPassBanner b{color:var(--good);font-size:1rem;}
+  #passList{overflow-y:auto;flex:1;padding:6px;}
+  .passItem{border:1px solid var(--border);border-radius:9px;padding:10px 12px;margin:6px;cursor:pointer;
+    transition:.15s;background:var(--panel2);}
+  .passItem:hover{border-color:var(--accent);}
+  .passItem.active{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent) inset;}
+  .passItem .row1{display:flex;justify-content:space-between;font-size:.88rem;font-weight:600;}
+  .passItem .row2{display:flex;justify-content:space-between;font-size:.75rem;color:var(--dim);margin-top:4px;}
+  .badge{font-size:.68rem;padding:2px 7px;border-radius:20px;border:1px solid var(--border);}
+  .badge.visible{color:var(--good);border-color:var(--good);}
+  .badge.day{color:var(--warn);border-color:var(--warn);}
+  #controlsRow{display:flex;gap:10px;flex-wrap:wrap;align-items:center;padding:8px 12px;
+    border-top:1px solid var(--border);font-size:.75rem;color:var(--dim);}
+  #controlsRow select{background:var(--panel2);color:var(--text);border:1px solid var(--border);
+    border-radius:6px;padding:4px 6px;font-size:.75rem;}
+  #domeSection{grid-column:1 / -1;min-height:380px;display:none;}
+  #domeSection.show{display:flex;}
+  #domeBody{display:flex;flex:1;min-height:0;}
+  #domeCanvasWrap{flex:1.3;position:relative;}
+  #domeCanvas{width:100%;height:100%;display:block;}
+  #domeDetails{flex:1;padding:14px;font-size:.85rem;line-height:1.7;border-left:1px solid var(--border);
+    overflow-y:auto;}
+  #domeDetails table{width:100%;border-collapse:collapse;margin-top:8px;}
+  #domeDetails td{padding:4px 0;border-bottom:1px solid var(--border);font-size:.82rem;}
+  #domeDetails td:first-child{color:var(--dim);}
+  #domeDetails td:last-child{text-align:right;font-weight:600;}
+  #closeDome{position:absolute;top:8px;right:10px;}
+  .hint{font-size:.72rem;color:var(--dim);margin-top:10px;}
+  ::-webkit-scrollbar{width:8px;} ::-webkit-scrollbar-thumb{background:#2a3358;border-radius:4px;}
+</style>
+</head>
+<body>
+<div id="stars"></div>
+<header>
+  <h1>🛰️ Passaggi ISS in 3D <small id="tleEpoch"></small></h1>
+  <div class="locbar">
+    <button class="primary" id="btnGeo">📍 Usa la mia posizione</button>
+    <span id="status">In attesa della posizione…</span>
+    <input type="number" id="latIn" placeholder="Lat" step="0.0001">
+    <input type="number" id="lonIn" placeholder="Lon" step="0.0001">
+    <button id="btnManual">Imposta</button>
+  </div>
+</header>
+
+<main>
+  <div class="card" id="globeWrap">
+    <h2>🌍 Vista 3D globale <span id="clock"></span></h2>
+    <div style="position:relative;flex:1;">
+      <canvas id="globeCanvas"></canvas>
+      <div id="issInfo">Attendo dati ISS…</div>
+      <div id="nextPassBanner">Calcolo passaggi…</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>📋 Prossimi passaggi visibili dalla tua zona</h2>
+    <div id="passList"><div class="hint" style="margin:14px;">Imposta la tua posizione per calcolare i passaggi.</div></div>
+    <div id="controlsRow">
+      <label>Elevazione min. <select id="minElev"><option>5</option><option selected>10</option><option>20</option><option>30</option></select>°</label>
+      <label>Finestra <select id="days"><option>2</option><option selected>3</option><option>5</option><option>7</option></select> giorni</label>
+      <button id="btnRecalc">🔄 Ricalcola</button>
+    </div>
+  </div>
+
+  <div class="card" id="domeSection">
+    <h2>🎯 Traiettoria del passaggio selezionato (vista dal basso, come nel cielo)
+      <button id="closeDome">✕ Chiudi</button>
+    </h2>
+    <div id="domeBody">
+      <div id="domeCanvasWrap"><canvas id="domeCanvas"></canvas></div>
+      <div id="domeDetails"></div>
+    </div>
+  </div>
+</main>
+
+<script>
+/* ================= TLE (fallback aggiornato) ================= */
+const FALLBACK_TLE = {
+  name: "ISS (ZARYA)",
+  l1: "1 25544U 98067A   26203.79832414  .00009714  00000+0  18351-3 0  9992",
+  l2: "2 25544  51.6313 123.8641 0006897 326.7338  33.3216 15.49102905577270"
+};
+let satrec = satellite.twoline2satrec(FALLBACK_TLE.l1, FALLBACK_TLE.l2);
+let tleSource = "fallback (22 lug 2026)";
+document.getElementById('tleEpoch').textContent = "· TLE: " + tleSource;
+
+// tentativo di TLE live (puo' fallire per CORS se offline / file locale: si usa comunque il fallback)
+(async function tryLiveTLE(){
+  try{
+    const ctrl = new AbortController();
+    const t = setTimeout(()=>ctrl.abort(), 4000);
+    const res = await fetch("https://celestrak.org/NORAD/elements/gp.php?CATNR=25544&FORMAT=TLE", {signal: ctrl.signal});
+    clearTimeout(t);
+    if(!res.ok) return;
+    const txt = await res.text();
+    const lines = txt.trim().split("\n").map(l=>l.trim());
+    if(lines.length>=3 && lines[1].startsWith("1 ") && lines[2].startsWith("2 ")){
+      satrec = satellite.twoline2satrec(lines[1], lines[2]);
+      tleSource = "live (Celestrak)";
+      document.getElementById('tleEpoch').textContent = "· TLE: " + tleSource;
+      if(observer.lat!==null) recalcPasses();
+    }
+  }catch(e){ /* ignora, resta il fallback */ }
+})();
+
+/* ================= stato osservatore ================= */
+const observer = { lat: null, lon: null, alt: 0.0 }; // alt in km
+const EARTH_R = 6371;
+const DEG2RAD = Math.PI/180, RAD2DEG = 180/Math.PI;
+
+function setStatus(msg){ document.getElementById('status').textContent = msg; }
+
+document.getElementById('btnGeo').addEventListener('click', ()=>{
+  if(!navigator.geolocation){ setStatus("Geolocalizzazione non supportata dal browser."); return; }
+  setStatus("Richiesta posizione in corso…");
+  navigator.geolocation.getCurrentPosition(pos=>{
+    observer.lat = pos.coords.latitude;
+    observer.lon = pos.coords.longitude;
+    observer.alt = (pos.coords.altitude||0)/1000;
+    document.getElementById('latIn').value = observer.lat.toFixed(4);
+    document.getElementById('lonIn').value = observer.lon.toFixed(4);
+    setStatus(`Posizione: ${observer.lat.toFixed(3)}°, ${observer.lon.toFixed(3)}°`);
+    placeObserverMarker();
+    recalcPasses();
+  }, err=>{
+    setStatus("Posizione negata/non disponibile: inseriscila manualmente →");
+  }, {enableHighAccuracy:false, timeout:8000});
+});
+
+document.getElementById('btnManual').addEventListener('click', ()=>{
+  const la = parseFloat(document.getElementById('latIn').value);
+  const lo = parseFloat(document.getElementById('lonIn').value);
+  if(isNaN(la) || isNaN(lo)){ setStatus("Inserisci lat/lon valide."); return; }
+  observer.lat = la; observer.lon = lo; observer.alt = 0;
+  setStatus(`Posizione manuale: ${la.toFixed(3)}°, ${lo.toFixed(3)}°`);
+  placeObserverMarker();
+  recalcPasses();
+});
+
+document.getElementById('btnRecalc').addEventListener('click', recalcPasses);
+
+/* ================= Sole: elevazione approssimata + illuminazione satellite ================= */
+function sunRaDecApprox(date){
+  const JD = date.getTime()/86400000 + 2440587.5;
+  const T = (JD - 2451545.0)/36525;
+  const L0 = (280.46646 + T*(36000.76983 + T*0.0003032)) % 360;
+  const M = (357.52911 + T*(35999.05029 - 0.0001537*T)) * DEG2RAD;
+  const e = 0.016708634 - T*(0.000042037 + 0.0000001267*T);
+  const C = Math.sin(M)*(1.914602 - T*(0.004817+0.000014*T)) + Math.sin(2*M)*(0.019993-0.000101*T) + Math.sin(3*M)*0.000289;
+  const trueLong = L0 + C;
+  const omega = 125.04 - 1934.136*T;
+  const appLong = (trueLong - 0.00569 - 0.00478*Math.sin(omega*DEG2RAD)) * DEG2RAD;
+  const eps0 = 23 + (26 + ((21.448 - T*(46.815+T*(0.00059-T*0.001813))))/60)/60;
+  const eps = (eps0 + 0.00256*Math.cos(omega*DEG2RAD)) * DEG2RAD;
+  const ra = Math.atan2(Math.cos(eps)*Math.sin(appLong), Math.cos(appLong));
+  const dec = Math.asin(Math.sin(eps)*Math.sin(appLong));
+  return {ra, dec};
+}
+function sunElevationAt(date, latDeg, lonDeg){
+  const {ra, dec} = sunRaDecApprox(date);
+  const gmst = satellite.gstime(date);
+  const H = gmst + lonDeg*DEG2RAD - ra;
+  const lat = latDeg*DEG2RAD;
+  const sinAlt = Math.sin(lat)*Math.sin(dec) + Math.cos(lat)*Math.cos(dec)*Math.cos(H);
+  return Math.asin(sinAlt) * RAD2DEG;
+}
+function sunEciUnitVector(date){
+  const {ra, dec} = sunRaDecApprox(date);
+  return { x: Math.cos(dec)*Math.cos(ra), y: Math.cos(dec)*Math.sin(ra), z: Math.sin(dec) };
+}
+function satIlluminated(satEciKm, date){
+  const s = sunEciUnitVector(date);
+  const dot = satEciKm.x*s.x + satEciKm.y*s.y + satEciKm.z*s.z;
+  const mag2 = satEciKm.x**2 + satEciKm.y**2 + satEciKm.z**2;
+  const perp2 = Math.max(0, mag2 - dot*dot);
+  const inShadow = (dot < 0) && (Math.sqrt(perp2) < EARTH_R);
+  return !inShadow;
+}
+
+/* ================= calcolo passaggi ================= */
+let passes = [];
+function lookAnglesAt(date){
+  const pv = satellite.propagate(satrec, date);
+  if(!pv.position) return null;
+  const gmst = satellite.gstime(date);
+  const gd = { longitude: observer.lon*DEG2RAD, latitude: observer.lat*DEG2RAD, height: observer.alt };
+  const ecf = satellite.eciToEcf(pv.position, gmst);
+  const look = satellite.ecfToLookAngles(gd, ecf);
+  return { elevDeg: look.elevation*RAD2DEG, azDeg: look.azimuth*RAD2DEG, rangeKm: look.rangeSat, eci: pv.position };
+}
+function azToCompass(az){
+  const dirs=["N","NNE","NE","ENE","E","ESE","SE","SSE","S","SSW","SW","WSW","W","WNW","NW","NNW"];
+  return dirs[Math.round(az/22.5)%16];
+}
+
+function recalcPasses(){
+  if(observer.lat===null){ setStatus("Imposta prima la posizione."); return; }
+  const minElev = parseFloat(document.getElementById('minElev').value);
+  const days = parseFloat(document.getElementById('days').value);
+  const now = new Date();
+  const end = new Date(now.getTime() + days*86400000);
+  const coarseStepSec = 30;
+  passes = [];
+  let inPass = false, samples = [], lastElev = -90;
+  let t = new Date(now);
+
+  while(t < end){
+    const la = lookAnglesAt(t);
+    if(la){
+      if(!inPass && la.elevDeg >= minElev && lastElev < minElev){
+        // rifinisci AOS con passi piu' fini indietro
+        let aosTime = refineCrossing(new Date(t.getTime()-coarseStepSec*1000), t, minElev, true);
+        inPass = true; samples = [];
+        samples.push({t: aosTime, ...lookAnglesAt(aosTime)});
+      }
+      if(inPass){
+        samples.push({t: new Date(t), ...la});
+      }
+      if(inPass && la.elevDeg < minElev && lastElev >= minElev){
+        let losTime = refineCrossing(new Date(t.getTime()-coarseStepSec*1000), t, minElev, false);
+        samples.push({t: losTime, ...lookAnglesAt(losTime)});
+        finalizePass(samples);
+        inPass = false; samples = [];
+      }
+      lastElev = la.elevDeg;
+    }
+    t = new Date(t.getTime() + coarseStepSec*1000);
+  }
+  renderPassList();
+}
+
+function refineCrossing(tLow, tHigh, minElev, rising){
+  for(let i=0;i<10;i++){
+    const mid = new Date((tLow.getTime()+tHigh.getTime())/2);
+    const la = lookAnglesAt(mid);
+    const above = la && la.elevDeg >= minElev;
+    if(rising ? above : !above) tHigh = mid; else tLow = mid;
+  }
+  return new Date((tLow.getTime()+tHigh.getTime())/2);
+}
+
+function finalizePass(samples){
+  let maxEl = -90, maxSample=null;
+  for(const s of samples){ if(s.elevDeg>maxEl){ maxEl=s.elevDeg; maxSample=s; } }
+  const aos = samples[0], los = samples[samples.length-1];
+  const sunElAtMax = sunElevationAt(maxSample.t, observer.lat, observer.lon);
+  const illuminated = satIlluminated(maxSample.eci, maxSample.t);
+  const visible = illuminated && sunElAtMax < -6;
+  passes.push({
+    aos, los, max: maxSample, samples,
+    durationSec: Math.round((los.t-aos.t)/1000),
+    visible, sunElAtMax
+  });
+}
+
+function renderPassList(){
+  const el = document.getElementById('passList');
+  el.innerHTML = "";
+  if(passes.length===0){
+    el.innerHTML = '<div class="hint" style="margin:14px;">Nessun passaggio trovato con questi filtri nella finestra scelta.</div>';
+    updateNextPassBanner();
+    return;
+  }
+  passes.forEach((p, idx)=>{
+    const div = document.createElement('div');
+    div.className = 'passItem';
+    div.dataset.idx = idx;
+    const dateStr = p.aos.t.toLocaleDateString('it-IT', {weekday:'short', day:'2-digit', month:'short'});
+    const timeStr = p.aos.t.toLocaleTimeString('it-IT', {hour:'2-digit', minute:'2-digit'});
+    div.innerHTML = `
+      <div class="row1"><span>${dateStr} · ${timeStr}</span>
+        <span class="badge ${p.visible?'visible':'day'}">${p.visible?'🌟 visibile a occhio nudo':'☀️ non visibile (luce)'}</span></div>
+      <div class="row2"><span>Max elev. ${p.max.elevDeg.toFixed(0)}° · ${azToCompass(p.max.azDeg)}</span>
+        <span>Durata ${Math.floor(p.durationSec/60)}m ${p.durationSec%60}s</span></div>`;
+    div.addEventListener('click', ()=> selectPass(idx));
+    el.appendChild(div);
+  });
+  updateNextPassBanner();
+}
+
+function updateNextPassBanner(){
+  const banner = document.getElementById('nextPassBanner');
+  if(passes.length===0){ banner.innerHTML = "Nessun passaggio trovato"; return; }
+  const p = passes[0];
+  const mins = Math.max(0, Math.round((p.aos.t - new Date())/60000));
+  banner.innerHTML = `Prossimo passaggio tra<br><b>${mins} min</b><br>${p.aos.t.toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'})} · max ${p.max.elevDeg.toFixed(0)}°`;
+}
+
+/* ================= vista 3D globale (Three.js) ================= */
+const globeCanvas = document.getElementById('globeCanvas');
+const globeRenderer = new THREE.WebGLRenderer({canvas: globeCanvas, antialias:true, alpha:true});
+const globeScene = new THREE.Scene();
+const globeCamera = new THREE.PerspectiveCamera(45, 1, 0.1, 1000);
+globeCamera.position.set(0, 6, 16);
+const globeControls = new THREE.OrbitControls(globeCamera, globeRenderer.domElement);
+globeControls.enableDamping = true; globeControls.minDistance=8; globeControls.maxDistance=40;
+
+globeScene.add(new THREE.AmbientLight(0x445577, 1.1));
+const sunLight = new THREE.DirectionalLight(0xffffff, 1.4);
+sunLight.position.set(20,10,10);
+globeScene.add(sunLight);
+
+const GLOBE_R = 5;
+const earthGeo = new THREE.SphereGeometry(GLOBE_R, 64, 64);
+const earthMat = new THREE.MeshPhongMaterial({color:0x1c4d8c, shininess:8});
+const earthMesh = new THREE.Mesh(earthGeo, earthMat);
+globeScene.add(earthMesh);
+// prova a caricare una texture reale; se fallisce resta il materiale colorato
+new THREE.TextureLoader().load(
+  "https://threejs.org/examples/textures/planets/earth_atmos_2048.jpg",
+  (tex)=>{ earthMat.map = tex; earthMat.color.set(0xffffff); earthMat.needsUpdate = true; },
+  undefined, ()=>{ /* fallback: resta il colore semplice */ }
+);
+// leggera atmosfera
+const atmGeo = new THREE.SphereGeometry(GLOBE_R*1.02, 48, 48);
+const atmMat = new THREE.MeshBasicMaterial({color:0x4fd1ff, transparent:true, opacity:0.08});
+globeScene.add(new THREE.Mesh(atmGeo, atmMat));
+// griglia lat/lon leggera
+const gridHelper = new THREE.LineSegments(
+  new THREE.WireframeGeometry(new THREE.SphereGeometry(GLOBE_R*1.001, 24, 16)),
+  new THREE.LineBasicMaterial({color:0x2a3a66, transparent:true, opacity:0.35})
+);
+globeScene.add(gridHelper);
+
+function latLonToVec3(lat, lon, radius){
+  const phi = (90-lat)*DEG2RAD, theta = (lon+180)*DEG2RAD;
+  return new THREE.Vector3(
+    -radius*Math.sin(phi)*Math.cos(theta),
+    radius*Math.cos(phi),
+    radius*Math.sin(phi)*Math.sin(theta)
+  );
+}
+
+let observerMarker = null, observerBeam = null;
+function placeObserverMarker(){
+  if(observerMarker) globeScene.remove(observerMarker);
+  if(observerBeam) globeScene.remove(observerBeam);
+  const geo = new THREE.SphereGeometry(0.09, 16, 16);
+  const mat = new THREE.MeshBasicMaterial({color:0xff7a59});
+  observerMarker = new THREE.Mesh(geo, mat);
+  observerMarker.position.copy(latLonToVec3(observer.lat, observer.lon, GLOBE_R*1.01));
+  globeScene.add(observerMarker);
+  // "raggio" verticale per evidenziarlo
+  const dir = observerMarker.position.clone().normalize();
+  const beamGeo = new THREE.CylinderGeometry(0.008,0.008,0.6,6);
+  observerBeam = new THREE.Mesh(beamGeo, mat);
+  observerBeam.position.copy(dir.clone().multiplyScalar(GLOBE_R*1.01+0.3));
+  observerBeam.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0), dir);
+  globeScene.add(observerBeam);
+}
+
+const issMarkerGeo = new THREE.SphereGeometry(0.13, 16, 16);
+const issMarkerMat = new THREE.MeshBasicMaterial({color:0xffffff, depthTest:false});
+const issMarker = new THREE.Mesh(issMarkerGeo, issMarkerMat);
+issMarker.renderOrder = 999;
+globeScene.add(issMarker);
+const issGlow = new THREE.PointLight(0x4fd1ff, 2, 3);
+issMarker.add(issGlow);
+
+// alone pulsante attorno al marker (sempre visibile sopra il globo)
+function makeHaloTexture(){
+  const c = document.createElement('canvas'); c.width=128; c.height=128;
+  const ctx = c.getContext('2d');
+  const g = ctx.createRadialGradient(64,64,0,64,64,64);
+  g.addColorStop(0,'rgba(79,209,255,0.9)');
+  g.addColorStop(0.4,'rgba(79,209,255,0.35)');
+  g.addColorStop(1,'rgba(79,209,255,0)');
+  ctx.fillStyle = g; ctx.fillRect(0,0,128,128);
+  return new THREE.CanvasTexture(c);
+}
+const issHalo = new THREE.Sprite(new THREE.SpriteMaterial({
+  map: makeHaloTexture(), transparent:true, depthTest:false, opacity:0.9
+}));
+issHalo.renderOrder = 998;
+issHalo.scale.set(0.9,0.9,1);
+issMarker.add(issHalo);
+
+// etichetta "ISS" che segue il marker
+const issLabel = makeLabelSprite("ISS");
+issLabel.material.depthTest = false;
+issLabel.renderOrder = 1000;
+issLabel.scale.set(0.7, 0.35, 1);
+issLabel.position.set(0, 0.32, 0);
+issMarker.add(issLabel);
+
+// scia orbitale (orbita completa attuale ~93 min)
+const trailPoints = [];
+const trailGeo = new THREE.BufferGeometry();
+const trailMat = new THREE.LineBasicMaterial({color:0x4fd1ff, transparent:true, opacity:0.7});
+const trailLine = new THREE.Line(trailGeo, trailMat);
+globeScene.add(trailLine);
+
+function updateOrbitTrail(centerDate){
+  const pts = [];
+  const periodMin = (2*Math.PI/satrec.no) ; // no e' in rad/min
+  for(let m=-periodMin/2; m<=periodMin/2; m+=1){
+    const d = new Date(centerDate.getTime()+m*60000);
+    const pv = satellite.propagate(satrec, d);
+    if(!pv.position) continue;
+    const gmst = satellite.gstime(d);
+    const gd = satellite.eciToGeodetic(pv.position, gmst);
+    const lat = satellite.degreesLat(gd.latitude), lon = satellite.degreesLong(gd.longitude);
+    pts.push(latLonToVec3(lat, lon, GLOBE_R*1.015));
+  }
+  trailGeo.setFromPoints(pts);
+}
+
+function resizeGlobe(){
+  const w = globeCanvas.clientWidth, h = globeCanvas.clientHeight;
+  globeRenderer.setSize(w,h,false);
+  globeCamera.aspect = w/h; globeCamera.updateProjectionMatrix();
+}
+
+// scia "recente" (ultimi minuti), piu' luminosa, per mostrare la direzione di moto in tempo reale
+const recentTrailGeo = new THREE.BufferGeometry();
+const recentTrailMat = new THREE.LineBasicMaterial({color:0xffffff, transparent:true, opacity:0.9});
+const recentTrailLine = new THREE.Line(recentTrailGeo, recentTrailMat);
+recentTrailLine.renderOrder = 997;
+globeScene.add(recentTrailLine);
+function updateRecentTrail(centerDate){
+  const pts = [];
+  for(let m=-6; m<=0; m+=0.25){
+    const d = new Date(centerDate.getTime()+m*60000);
+    const pv = satellite.propagate(satrec, d);
+    if(!pv.position) continue;
+    const gmst = satellite.gstime(d);
+    const gd = satellite.eciToGeodetic(pv.position, gmst);
+    pts.push(latLonToVec3(satellite.degreesLat(gd.latitude), satellite.degreesLong(gd.longitude), GLOBE_R*1.02));
+  }
+  recentTrailGeo.setFromPoints(pts);
+}
+
+let lastTrailUpdate = 0, lastRecentUpdate = 0;
+function animateGlobe(){
+  requestAnimationFrame(animateGlobe);
+  resizeGlobe();
+  const now = new Date();
+  const pv = satellite.propagate(satrec, now);
+  if(pv.position){
+    const gmst = satellite.gstime(now);
+    const gd = satellite.eciToGeodetic(pv.position, gmst);
+    const lat = satellite.degreesLat(gd.latitude), lon = satellite.degreesLong(gd.longitude);
+    issMarker.position.copy(latLonToVec3(lat, lon, GLOBE_R*1.02));
+    const pulse = 0.8 + 0.25*Math.sin(now.getTime()/300);
+    issHalo.scale.set(0.9*pulse, 0.9*pulse, 1);
+    const speedKmS = Math.sqrt(pv.velocity.x**2+pv.velocity.y**2+pv.velocity.z**2);
+    document.getElementById('issInfo').innerHTML =
+      `<b>ISS</b> lat ${lat.toFixed(2)}° lon ${lon.toFixed(2)}°<br>alt ${gd.height.toFixed(0)} km · vel ${speedKmS.toFixed(2)} km/s`;
+    if(now.getTime()-lastTrailUpdate > 30000){ updateOrbitTrail(now); lastTrailUpdate = now.getTime(); }
+    if(now.getTime()-lastRecentUpdate > 5000){ updateRecentTrail(now); lastRecentUpdate = now.getTime(); }
+  }
+  document.getElementById('clock').textContent = now.toLocaleTimeString('it-IT');
+  if(passes.length) updateNextPassBanner();
+  globeControls.update();
+  globeRenderer.render(globeScene, globeCamera);
+}
+animateGlobe();
+
+/* ================= vista a cupola (per il singolo passaggio) ================= */
+const domeCanvas = document.getElementById('domeCanvas');
+const domeRenderer = new THREE.WebGLRenderer({canvas: domeCanvas, antialias:true, alpha:true});
+const domeScene = new THREE.Scene();
+const domeCamera = new THREE.PerspectiveCamera(50, 1, 0.1, 100);
+domeCamera.position.set(6, 5, 9);
+const domeControls = new THREE.OrbitControls(domeCamera, domeRenderer.domElement);
+domeControls.enableDamping = true; domeControls.target.set(0,0.5,0);
+domeControls.minDistance=4; domeControls.maxDistance=20;
+
+domeScene.add(new THREE.AmbientLight(0x8899cc, 1.2));
+const DOME_R = 4;
+function azElToVec3(azDeg, elDeg, radius){
+  const az = azDeg*DEG2RAD, el = elDeg*DEG2RAD;
+  return new THREE.Vector3(
+    radius*Math.cos(el)*Math.sin(az),
+    radius*Math.sin(el),
+    -radius*Math.cos(el)*Math.cos(az)
+  );
+}
+// piattaforma / orizzonte
+const groundGeo = new THREE.CircleGeometry(DOME_R, 48);
+const groundMat = new THREE.MeshBasicMaterial({color:0x0d1730, transparent:true, opacity:0.5, side:THREE.DoubleSide});
+const ground = new THREE.Mesh(groundGeo, groundMat);
+ground.rotation.x = -Math.PI/2;
+domeScene.add(ground);
+// anelli di elevazione (0,30,60)
+[0,30,60].forEach(elDeg=>{
+  const pts=[];
+  for(let a=0;a<=360;a+=5) pts.push(azElToVec3(a, elDeg, DOME_R));
+  const g = new THREE.BufferGeometry().setFromPoints(pts);
+  const ring = new THREE.LineLoop(g, new THREE.LineBasicMaterial({color: elDeg===0?0x3a4a7a:0x24304f}));
+  domeScene.add(ring);
+});
+// osservatore al centro
+const obsDot = new THREE.Mesh(new THREE.SphereGeometry(0.08,12,12), new THREE.MeshBasicMaterial({color:0xff7a59}));
+domeScene.add(obsDot);
+
+function makeLabelSprite(text){
+  const c = document.createElement('canvas'); c.width=128; c.height=64;
+  const ctx = c.getContext('2d');
+  ctx.font = "bold 40px Segoe UI"; ctx.fillStyle="#cfe0ff"; ctx.textAlign="center"; ctx.textBaseline="middle";
+  ctx.fillText(text, 64, 32);
+  const tex = new THREE.CanvasTexture(c);
+  const mat = new THREE.SpriteMaterial({map:tex, transparent:true});
+  const sprite = new THREE.Sprite(mat);
+  sprite.scale.set(1,0.5,1);
+  return sprite;
+}
+[["N",0],["E",90],["S",180],["W",270]].forEach(([lbl,az])=>{
+  const s = makeLabelSprite(lbl);
+  const p = azElToVec3(az, 2, DOME_R*1.12);
+  s.position.copy(p);
+  domeScene.add(s);
+});
+
+let passCurveLine=null, passMarkers=[], flyMarker=null, flyAnim=null;
+function showDomeForPass(p){
+  document.getElementById('domeSection').classList.add('show');
+  if(passCurveLine){ domeScene.remove(passCurveLine); passCurveLine=null; }
+  passMarkers.forEach(m=>domeScene.remove(m)); passMarkers=[];
+  if(flyMarker){ domeScene.remove(flyMarker); flyMarker=null; }
+
+  const pts = p.samples.map(s=>azElToVec3(s.azDeg, Math.max(s.elevDeg,0), DOME_R));
+  const curve = new THREE.CatmullRomCurve3(pts);
+  const tube = new THREE.TubeGeometry(curve, Math.max(20,pts.length*2), 0.03, 8, false);
+  const tubeMat = new THREE.MeshBasicMaterial({color:0x4fd1ff});
+  passCurveLine = new THREE.Mesh(tube, tubeMat);
+  domeScene.add(passCurveLine);
+
+  function addMarker(sample, color, label){
+    const dot = new THREE.Mesh(new THREE.SphereGeometry(0.1,12,12), new THREE.MeshBasicMaterial({color}));
+    dot.position.copy(azElToVec3(sample.azDeg, Math.max(sample.elevDeg,0), DOME_R));
+    domeScene.add(dot); passMarkers.push(dot);
+    const s = makeLabelSprite(label);
+    s.position.copy(dot.position.clone().add(new THREE.Vector3(0,0.35,0)));
+    domeScene.add(s); passMarkers.push(s);
+  }
+  addMarker(p.aos, 0x5ee6a0, "AOS");
+  addMarker(p.max, 0xffcf5e, "MAX");
+  addMarker(p.los, 0xff7a59, "LOS");
+
+  flyMarker = new THREE.Mesh(new THREE.SphereGeometry(0.13,14,14), new THREE.MeshBasicMaterial({color:0xffffff}));
+  domeScene.add(flyMarker);
+  if(flyAnim) cancelAnimationFrame(flyAnim);
+  let t0 = performance.now();
+  const animDurMs = 6000;
+  function animFly(now){
+    const frac = ((now-t0)/animDurMs) % 1;
+    const pt = curve.getPointAt(frac);
+    flyMarker.position.copy(pt);
+    flyAnim = requestAnimationFrame(animFly);
+  }
+  flyAnim = requestAnimationFrame(animFly);
+
+  const dur = p.durationSec;
+  document.getElementById('domeDetails').innerHTML = `
+    <div style="font-size:1.3rem;font-weight:600;">${p.aos.t.toLocaleDateString('it-IT',{weekday:'long', day:'2-digit', month:'long'})}</div>
+    <div class="badge ${p.visible?'visible':'day'}" style="display:inline-block;margin-top:6px;">
+      ${p.visible?'🌟 Visibile ad occhio nudo (cielo scuro + ISS illuminata)':'☀️ Non visibile ad occhio nudo (cielo troppo chiaro o ISS in ombra)'}
+    </div>
+    <table>
+      <tr><td>Levata (AOS)</td><td>${p.aos.t.toLocaleTimeString('it-IT')} · ${azToCompass(p.aos.azDeg)}</td></tr>
+      <tr><td>Massima elevazione</td><td>${p.max.elevDeg.toFixed(0)}° alle ${p.max.t.toLocaleTimeString('it-IT')} (${azToCompass(p.max.azDeg)})</td></tr>
+      <tr><td>Tramonto (LOS)</td><td>${p.los.t.toLocaleTimeString('it-IT')} · ${azToCompass(p.los.azDeg)}</td></tr>
+      <tr><td>Durata totale</td><td>${Math.floor(dur/60)} min ${dur%60} s</td></tr>
+      <tr><td>Distanza al culmine</td><td>${p.max.rangeKm.toFixed(0)} km</td></tr>
+      <tr><td>Elevazione Sole (al culmine)</td><td>${p.sunElAtMax.toFixed(1)}°</td></tr>
+    </table>
+    <div class="hint">La sfera bianca percorre la traiettoria reale (azimut/elevazione) che vedresti guardando il cielo, compressa in un ciclo di 6 secondi. N/E/S/W indicano i punti cardinali all'orizzonte.</div>
+  `;
+}
+
+function selectPass(idx){
+  document.querySelectorAll('.passItem').forEach(el=>el.classList.remove('active'));
+  const item = document.querySelector(`.passItem[data-idx="${idx}"]`);
+  if(item) item.classList.add('active');
+  showDomeForPass(passes[idx]);
+  document.getElementById('domeSection').scrollIntoView({behavior:'smooth', block:'nearest'});
+}
+
+document.getElementById('closeDome').addEventListener('click', ()=>{
+  document.getElementById('domeSection').classList.remove('show');
+  document.querySelectorAll('.passItem').forEach(el=>el.classList.remove('active'));
+});
+
+function resizeDome(){
+  const w = domeCanvas.clientWidth, h = domeCanvas.clientHeight;
+  if(w===0||h===0) return;
+  domeRenderer.setSize(w,h,false);
+  domeCamera.aspect = w/h; domeCamera.updateProjectionMatrix();
+}
+function animateDome(){
+  requestAnimationFrame(animateDome);
+  resizeDome();
+  domeControls.update();
+  domeRenderer.render(domeScene, domeCamera);
+}
+animateDome();
+
+// avvio automatico: prova subito la geolocalizzazione
+document.getElementById('btnGeo').click();
+</script>
+</body>
+</html>
